@@ -212,6 +212,9 @@ async function renderTeacher() {
       renderTeacher();
     }
   };
+    if (classes.length === 0) {
+    document.getElementById('new-class-form').classList.remove('hidden');
+  }
   document.getElementById('nc-create').onclick = async () => {
     const name = document.getElementById('nc-name').value.trim();
     const rows = parseInt(document.getElementById('nc-rows').value) || 5;
