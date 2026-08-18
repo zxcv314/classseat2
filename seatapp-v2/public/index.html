@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>자리배치 프로그램</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F2F4F0;--paper:#FFFFFF;--ink:#1B2A2E;--ink2:#52635F;
+  --A:#2F6B4F;--Ad:#234F3A;--As:#DCEAE1;
+  --R:#B6543C;--Rs:#F4DDD6;
+  --L:#C7D2C4;--Ls:#E3E9DF;
+  --sh:0 2px 10px rgba(27,42,46,.08);--r:10px;
+  --fD:'Gowun Batang',serif;--fB:'Noto Sans KR',sans-serif;--fM:'Space Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{min-height:100%;background:var(--bg);color:var(--ink);font-family:var(--fB);}
+body{background-image:linear-gradient(var(--Ls) 1px,transparent 1px),linear-gradient(90deg,var(--Ls) 1px,transparent 1px);background-size:28px 28px;}
+button{font-family:inherit;cursor:pointer;}
+input,select,textarea{font-family:inherit;color:var(--ink);background:var(--paper);}
+.wrap{max-width:760px;margin:0 auto;padding:24px 18px 80px;}
+.brand{font-family:var(--fD);font-size:24px;font-weight:700;color:var(--Ad);margin-bottom:18px;text-align:center;}
+.card{background:var(--paper);border:1.5px solid var(--L);border-radius:var(--r);box-shadow:var(--sh);padding:20px;margin-bottom:16px;}
+.card h2{font-size:17px;margin-bottom:10px;}
+.hint{font-size:12.5px;color:var(--ink2);margin-bottom:12px;}
+.fld{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;}
+.fld label{font-size:12.5px;color:var(--ink2);}
+.fld input,.fld select,.fld textarea{padding:9px 10px;border:1.5px solid var(--L);border-radius:8px;font-size:14px;}
+.row{display:flex;gap:10px;flex-wrap:wrap;}
+.row .fld{flex:1;min-width:120px;}
+.btn{padding:10px 16px;border-radius:8px;border:1.5px solid var(--L);background:var(--paper);font-size:13.5px;font-weight:600;}
+.btn-p{background:var(--A);color:#fff;border-color:var(--A);}
+.btn-p:disabled{opacity:.5;cursor:not-allowed;}
+.btn-g{background:var(--As);color:var(--Ad);border-color:var(--As);}
+.tabs{display:flex;gap:6px;margin-bottom:14px;}
+.tabs button{flex:1;}
+.tabs button.on{background:var(--Ad);color:#fff;border-color:var(--Ad);}
+.msg{font-size:13px;padding:8px 10px;border-radius:8px;margin-bottom:10px;}
+.msg.err{background:var(--Rs);color:var(--R);}
+.msg.ok{background:var(--As);color:var(--Ad);}
+.pin-table{width:100%;border-collapse:collapse;font-family:var(--fM);font-size:13px;}
+.pin-table th,.pin-table td{border:1px solid var(--L);padding:6px 8px;text-align:center;}
+.classcode{font-family:var(--fM);background:var(--As);color:var(--Ad);padding:3px 8px;border-radius:6px;font-size:13px;}
+.sg{display:inline-block;}
+.sr{display:flex;}
+.sc{width:70px;height:56px;margin:2.5px;border-radius:6px;border:1.5px solid var(--L);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;text-align:center;background:var(--As);}
+.sc.empty{background:var(--Ls);color:var(--ink2);font-weight:400;font-size:10.5px;}
+.link-btn{background:none;border:none;color:var(--A);font-size:13px;text-decoration:underline;cursor:pointer;}
+.hidden{display:none!important;}
+.slider-val{font-family:var(--fM);font-size:12px;color:var(--ink2);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">자리배치 프로그램</div>
+  <div id="app"></div>
+</div>
+
+<!-- Firebase (모듈형 SDK, CDN) -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  signInWithCustomToken, signOut
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ▼▼▼ Firebase 콘솔 > 프로젝트 설정 > 일반 > "내 앱"에서 복사한 값으로 교체하세요 ▼▼▼
+const firebaseConfig = {
+  apiKey: "AIzaSyAOKhgT1fHeNs0wIhjc6rcjqCgjcX7FcFk",
+  authDomain: "classseat-c7328.firebaseapp.com",
+  databaseURL: "https://classseat-c7328-default-rtdb.firebaseio.com",
+  projectId: "classseat-c7328",
+  storageBucket: "classseat-c7328.firebasestorage.app",
+  messagingSenderId: "100599928392",
+  appId: "1:100599928392:web:af72a41e571def1511aa7d"
+};
+// ▲▲▲ ─────────────────────────────────────────────────── ▲▲▲
+
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+const app = document.getElementById('app');
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(path, body, idToken) {
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(idToken ? { Authorization: 'Bearer ' + idToken } : {}) },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || '요청 실패');
+  return data;
+}
+
+/* ══════════ 라우터 ══════════ */
+let _role = null; // 'teacher' | 'student' | null
+let _studentInfo = null; // {classId, number, name}
+
+function render() {
+  if (!auth.currentUser) { renderLanding(); return; }
+  if (_role === 'teacher') renderTeacher();
+  else if (_role === 'student') renderStudent();
+  else renderLanding();
+}
+
+onAuthStateChanged(auth, (user) => {
+  if (!user) { _role = null; _studentInfo = null; }
+  render();
+});
+
+function renderLanding() {
+  app.innerHTML = `
+    <div class="card">
+      <h2>어떻게 오셨나요?</h2>
+      <p class="hint">선생님은 반을 만들고 자리배치를 실행합니다. 학생은 번호+PIN으로 로그인해서 본인 정보만 입력합니다.</p>
+      <div class="row">
+        <button class="btn btn-p" id="go-teacher" style="flex:1">👩‍🏫 선생님</button>
+        <button class="btn btn-g" id="go-student" style="flex:1">🧑‍🎓 학생</button>
+      </div>
+    </div>`;
+  document.getElementById('go-teacher').onclick = () => renderTeacherAuth();
+  document.getElementById('go-student').onclick = () => renderStudentAuth();
+}
+
+/* ══════════ 선생님: 로그인/가입 ══════════ */
+function renderTeacherAuth() {
+  app.innerHTML = `
+    <div class="card">
+      <div class="tabs">
+        <button class="on" id="tab-login">로그인</button>
+        <button id="tab-signup">회원가입</button>
+      </div>
+      <div id="auth-msg"></div>
+      <div class="fld"><label>이메일</label><input id="em" type="email" placeholder="teacher@school.kr"></div>
+      <div class="fld"><label>비밀번호</label><input id="pw" type="password" placeholder="6자 이상"></div>
+      <button class="btn btn-p" id="auth-go" style="width:100%">로그인</button>
+      <p style="margin-top:12px"><button class="link-btn" id="back">← 처음으로</button></p>
+    </div>`;
+  let mode = 'login';
+  const setMode = (m) => {
+    mode = m;
+    document.getElementById('tab-login').classList.toggle('on', m === 'login');
+    document.getElementById('tab-signup').classList.toggle('on', m === 'signup');
+    document.getElementById('auth-go').textContent = m === 'login' ? '로그인' : '회원가입';
+  };
+  document.getElementById('tab-login').onclick = () => setMode('login');
+  document.getElementById('tab-signup').onclick = () => setMode('signup');
+  document.getElementById('back').onclick = renderLanding;
+  document.getElementById('auth-go').onclick = async () => {
+    const email = document.getElementById('em').value.trim();
+    const pw = document.getElementById('pw').value;
+    const msg = document.getElementById('auth-msg');
+    msg.innerHTML = '';
+    try {
+      if (mode === 'login') await signInWithEmailAndPassword(auth, email, pw);
+      else await createUserWithEmailAndPassword(auth, email, pw);
+      _role = 'teacher';
+      render();
+    } catch (e) {
+      msg.innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
+    }
+  };
+}
+
+/* ══════════ 선생님: 대시보드 ══════════ */
+let _currentClassId = null;
+
+async function renderTeacher() {
+  app.innerHTML = `<div class="card"><p class="hint">불러오는 중...</p></div>`;
+  const q = query(collection(db, 'classes'), where('teacherUid', '==', auth.currentUser.uid));
+  const snap = await getDocs(q);
+  const classes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  if (!_currentClassId && classes.length) _currentClassId = classes[0].id;
+
+  app.innerHTML = `
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:13px;color:var(--ink2)">${esc(auth.currentUser.email)}</span>
+      <button class="link-btn" id="logout">로그아웃</button>
+    </div>
+    <div class="card">
+      <h2>내 반</h2>
+      <div class="row" style="margin-bottom:10px">
+        <select id="class-sel" style="flex:1;padding:8px;border-radius:8px;border:1.5px solid var(--L)">
+          ${classes.map((c) => `<option value="${c.id}"${c.id===_currentClassId?' selected':''}>${esc(c.name)}</option>`).join('')}
+          <option value="__new__">+ 새 반 만들기</option>
+        </select>
+      </div>
+      <div id="new-class-form" class="hidden">
+        <div class="row">
+          <div class="fld"><label>반 이름</label><input id="nc-name" placeholder="예: 2학년 3반"></div>
+          <div class="fld" style="max-width:90px"><label>행(줄)</label><input id="nc-rows" type="number" value="5" min="1"></div>
+          <div class="fld" style="max-width:90px"><label>열(칸)</label><input id="nc-cols" type="number" value="6" min="1"></div>
+        </div>
+        <button class="btn btn-p" id="nc-create">반 만들기</button>
+      </div>
+    </div>
+    <div id="class-body"></div>
+  `;
+  document.getElementById('logout').onclick = () => signOut(auth);
+  const sel = document.getElementById('class-sel');
+  sel.onchange = () => {
+    if (sel.value === '__new__') {
+      document.getElementById('new-class-form').classList.remove('hidden');
+    } else {
+      _currentClassId = sel.value;
+      renderTeacher();
+    }
+  };
+  document.getElementById('nc-create').onclick = async () => {
+    const name = document.getElementById('nc-name').value.trim();
+    const rows = parseInt(document.getElementById('nc-rows').value) || 5;
+    const cols = parseInt(document.getElementById('nc-cols').value) || 6;
+    if (!name) return;
+    const grid = Array.from({ length: rows * cols }, () => ({ type: 'seat', aircon: false }));
+    const ref = doc(collection(db, 'classes'));
+    await setDoc(ref, {
+      teacherUid: auth.currentUser.uid, name, rows, cols, grid, roster: {},
+      constraints: { blacklist: [], whitelist: [], fixedSeats: {}, lively: [], distLevel: 3, personalityBalance: true, gradeBalance: true, activityBalance: false },
+      weights: { location: 5, mate: 6, personality: 10, grade: 10, lively: 5 },
+      createdAt: new Date().toISOString(),
+    });
+    _currentClassId = ref.id;
+    renderTeacher();
+  };
+
+  if (_currentClassId && classes.find((c) => c.id === _currentClassId)) {
+    renderClassBody(classes.find((c) => c.id === _currentClassId));
+  }
+}
+
+async function renderClassBody(cls) {
+  const body = document.getElementById('class-body');
+  const w = cls.weights, con = cls.constraints;
+
+  body.innerHTML = `
+    <div class="card">
+      <h2>반 코드</h2>
+      <p class="hint">학생들에게 이 코드와 각자의 번호+PIN을 알려주세요.</p>
+      <span class="classcode">${esc(cls.id)}</span>
+    </div>
+    <div class="card">
+      <h2>학생 계정 만들기</h2>
+      <p class="hint">이름을 한 줄에 한 명씩 입력하면 번호+PIN이 자동 생성됩니다.</p>
+      <div class="fld"><textarea id="names" rows="4" placeholder="이광호&#10;김민지&#10;박서준"></textarea></div>
+      <button class="btn btn-p" id="gen-accounts">계정 생성</button>
+      <div id="pin-out" style="margin-top:12px"></div>
+    </div>
+    <div class="card">
+      <h2>배치 가중치 조절</h2>
+      ${slider('w-mate', '선호 짝꿍', w.mate, 0, 15)}
+      ${slider('w-personality', '성격 균형(E/I)', w.personality, 0, 20)}
+      ${slider('w-grade', '성적 균형', w.grade, 0, 20)}
+      ${slider('w-lively', '활동성 분산', w.lively, 0, 15)}
+      ${slider('w-location', '선호 위치/에어컨', w.location, 0, 15)}
+      <label style="display:flex;gap:6px;align-items:center;margin-top:8px;font-size:13px"><input type="checkbox" id="c-grade" ${con.gradeBalance?'checked':''}> 분단별 성적 고르게 섞기</label>
+      <label style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:13px"><input type="checkbox" id="c-pers" ${con.personalityBalance?'checked':''}> 성격 균형(E/I) 반영</label>
+      <label style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:13px"><input type="checkbox" id="c-act" ${con.activityBalance?'checked':''}> 활동성 높은 학생끼리 짝꿍 방지</label>
+      <button class="btn btn-g" id="save-weights" style="margin-top:12px">저장</button>
+    </div>
+    <div class="card">
+      <h2>배치 실행</h2>
+      <p class="hint">서버에서 계산합니다. 학생들이 입력한 원본 정보는 선생님 화면에 노출되지 않고, 최종 좌석 배정 결과만 보여줍니다.</p>
+      <button class="btn btn-p" id="run-btn">🚀 배치 실행</button>
+      <div id="run-msg"></div>
+    </div>
+    <div class="card" id="result-card"><h2>최종 좌석 배치</h2><div id="result-grid"><p class="hint">아직 실행 결과가 없습니다.</p></div></div>
+  `;
+
+  document.getElementById('gen-accounts').onclick = async () => {
+    const names = document.getElementById('names').value.split('\n').map((s) => s.trim()).filter(Boolean);
+    if (!names.length) return;
+    const idToken = await auth.currentUser.getIdToken();
+    try {
+      const { created } = await api('/api/create-students', { classId: cls.id, names }, idToken);
+      document.getElementById('pin-out').innerHTML = `
+        <table class="pin-table"><thead><tr><th>번호</th><th>이름</th><th>PIN</th></tr></thead>
+        <tbody>${created.map((s) => `<tr><td>${s.number}</td><td>${esc(s.name)}</td><td>${s.pin}</td></tr>`).join('')}</tbody></table>
+        <p class="hint" style="margin-top:8px">⚠️ PIN은 지금 화면에서만 보여요. 캡처하거나 적어서 학생들에게 나눠주세요.</p>`;
+      document.getElementById('names').value = '';
+    } catch (e) {
+      document.getElementById('pin-out').innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
+    }
+  };
+
+  document.getElementById('save-weights').onclick = async () => {
+    await updateDoc(doc(db, 'classes', cls.id), {
+      weights: {
+        mate: +document.getElementById('w-mate').value,
+        personality: +document.getElementById('w-personality').value,
+        grade: +document.getElementById('w-grade').value,
+        lively: +document.getElementById('w-lively').value,
+        location: +document.getElementById('w-location').value,
+      },
+      'constraints.gradeBalance': document.getElementById('c-grade').checked,
+      'constraints.personalityBalance': document.getElementById('c-pers').checked,
+      'constraints.activityBalance': document.getElementById('c-act').checked,
+    });
+    renderTeacher();
+  };
+
+  document.getElementById('run-btn').onclick = async () => {
+    const btn = document.getElementById('run-btn');
+    btn.disabled = true; btn.textContent = '계산 중... (몇 초 걸릴 수 있어요)';
+    const msg = document.getElementById('run-msg');
+    msg.innerHTML = '';
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      await api('/api/run-seating', { classId: cls.id }, idToken);
+      msg.innerHTML = `<div class="msg ok">배치 완료!</div>`;
+      await loadResult(cls.id);
+    } catch (e) {
+      msg.innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
+    }
+    btn.disabled = false; btn.textContent = '🚀 배치 실행';
+  };
+
+  loadResult(cls.id);
+}
+
+function slider(id, label, val, min, max) {
+  return `<div class="fld"><label>${label} <span class="slider-val" id="${id}-v">${val}</span></label>
+    <input type="range" id="${id}" min="${min}" max="${max}" value="${val}" oninput="document.getElementById('${id}-v').textContent=this.value"></div>`;
+}
+
+async function loadResult(classId) {
+  const snap = await getDoc(doc(db, 'classes', classId, 'results', 'current'));
+  const box = document.getElementById('result-grid');
+  if (!box) return;
+  if (!snap.exists()) { box.innerHTML = '<p class="hint">아직 실행 결과가 없습니다.</p>'; return; }
+  const r = snap.data();
+  let html = '<div class="sg">';
+  for (let row = 0; row < r.rows; row++) {
+    html += '<div class="sr">';
+    for (let col = 0; col < r.cols; col++) {
+      const cell = r.grid[row][col];
+      html += `<div class="sc${cell.name?'':' empty'}">${cell.name ? esc(cell.number)+'.<br>'+esc(cell.name) : ''}</div>`;
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+/* ══════════ 학생: 로그인 ══════════ */
+function renderStudentAuth() {
+  app.innerHTML = `
+    <div class="card">
+      <h2>학생 로그인</h2>
+      <div id="auth-msg"></div>
+      <div class="fld"><label>반 코드</label><input id="s-class" placeholder="선생님이 알려준 코드"></div>
+      <div class="fld"><label>번호</label><input id="s-num" type="number" placeholder="예: 3"></div>
+      <div class="fld"><label>PIN (4자리)</label><input id="s-pin" type="password" maxlength="4" placeholder="****"></div>
+      <button class="btn btn-p" id="s-login" style="width:100%">로그인</button>
+      <p style="margin-top:12px"><button class="link-btn" id="back">← 처음으로</button></p>
+    </div>`;
+  document.getElementById('back').onclick = renderLanding;
+  document.getElementById('s-login').onclick = async () => {
+    const classId = document.getElementById('s-class').value.trim();
+    const number = document.getElementById('s-num').value.trim();
+    const pin = document.getElementById('s-pin').value.trim();
+    const msg = document.getElementById('auth-msg');
+    msg.innerHTML = '';
+    try {
+      const { token, name } = await api('/api/student-login', { classId, number, pin });
+      await signInWithCustomToken(auth, token);
+      _role = 'student';
+      _studentInfo = { classId, number, name };
+      render();
+    } catch (e) {
+      msg.innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
+    }
+  };
+}
+
+/* ══════════ 학생: 정보 입력 ══════════ */
+async function renderStudent() {
+  if (!_studentInfo) { await signOut(auth); return; }
+  const { classId, number } = _studentInfo;
+  app.innerHTML = `<div class="card"><p class="hint">불러오는 중...</p></div>`;
+
+  const [classSnap, meSnap] = await Promise.all([
+    getDoc(doc(db, 'classes', classId)),
+    getDoc(doc(db, 'classes', classId, 'students', number)),
+  ]);
+  const roster = classSnap.exists() ? (classSnap.data().roster || {}) : {};
+  const me = meSnap.data();
+
+  const mateOpts = Object.entries(roster).filter(([n]) => n !== number)
+    .map(([n, nm]) => `<option value="${n}">${esc(nm)}</option>`).join('');
+
+  app.innerHTML = `
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:13px;color:var(--ink2)">${esc(me.name)} (${number}번)</span>
+      <button class="link-btn" id="logout">로그아웃</button>
+    </div>
+    <div class="card">
+      <h2>내 정보 입력</h2>
+      <p class="hint">여기 입력한 내용은 선생님에게 그대로 보이지 않아요. 자리배치를 계산할 때만 쓰이고, 최종 좌석 위치만 선생님 화면에 나타납니다.</p>
+      <div class="row">
+        <div class="fld"><label>MBTI</label><input id="f-mbti" value="${esc(me.mbti||'')}" placeholder="예: ENFP"></div>
+        <div class="fld"><label>성적</label><select id="f-grade">${['상','중','하'].map(v=>`<option ${me.grade===v?'selected':''}>${v}</option>`).join('')}</select></div>
+      </div>
+      <div class="row">
+        <div class="fld"><label>키</label><select id="f-height">${['상','중','하'].map(v=>`<option ${me.height===v?'selected':''}>${v}</option>`).join('')}</select></div>
+        <div class="fld"><label>시력이 안좋아 앞자리가 필요한가요?</label><select id="f-eye"><option value="N" ${!me.eyesight?'selected':''}>아니오</option><option value="Y" ${me.eyesight?'selected':''}>예</option></select></div>
+      </div>
+      <div class="row">
+        <div class="fld"><label>선호 위치</label><select id="f-loc">${['앞','중간','뒤','상관없음'].map(v=>`<option ${me.preferredLocation===v?'selected':''}>${v}</option>`).join('')}</select></div>
+        <div class="fld"><label>에어컨</label><select id="f-ac">${['직빵','피함','상관없음'].map(v=>`<option ${me.aircon===v?'selected':''}>${v}</option>`).join('')}</select></div>
+      </div>
+      <div class="fld">
+        <label>활동성 (집중력·수업태도·소음 종합)</label>
+        <select id="f-act">${['높음','중간','낮음'].map(v=>`<option ${me.activity===v?'selected':''}>${v}</option>`).join('')}</select>
+      </div>
+      <div class="fld">
+        <label>선호 짝꿍 (최대 3명, 1지망이 가장 크게 반영돼요)</label>
+        <select id="f-mate1"><option value="">1지망 선택안함</option>${mateOpts}</select>
+      </div>
+      <div class="fld"><select id="f-mate2"><option value="">2지망 선택안함</option>${mateOpts}</select></div>
+      <div class="fld"><select id="f-mate3"><option value="">3지망 선택안함</option>${mateOpts}</select></div>
+      <div class="fld"><label>기피 짝꿍</label><select id="f-avoid"><option value="">선택안함</option>${mateOpts}</select></div>
+      <div class="fld"><label>메모 (선택)</label><textarea id="f-memo" rows="2">${esc(me.memo||'')}</textarea></div>
+      <button class="btn btn-p" id="f-save" style="width:100%">저장</button>
+      <div id="f-msg"></div>
+    </div>`;
+
+  document.getElementById('f-mate1').value = (me.preferredMates||[])[0] || '';
+  document.getElementById('f-mate2').value = (me.preferredMates||[])[1] || '';
+  document.getElementById('f-mate3').value = (me.preferredMates||[])[2] || '';
+  document.getElementById('f-avoid').value = me.avoidedMate || '';
+
+  document.getElementById('logout').onclick = () => signOut(auth);
+  document.getElementById('f-save').onclick = async () => {
+    const preferredMates = [
+      document.getElementById('f-mate1').value,
+      document.getElementById('f-mate2').value,
+      document.getElementById('f-mate3').value,
+    ].filter(Boolean);
+    try {
+      await updateDoc(doc(db, 'classes', classId, 'students', number), {
+        mbti: document.getElementById('f-mbti').value.trim(),
+        grade: document.getElementById('f-grade').value,
+        height: document.getElementById('f-height').value,
+        eyesight: document.getElementById('f-eye').value === 'Y',
+        preferredLocation: document.getElementById('f-loc').value,
+        aircon: document.getElementById('f-ac').value,
+        activity: document.getElementById('f-act').value,
+        preferredMates,
+        avoidedMate: document.getElementById('f-avoid').value,
+        memo: document.getElementById('f-memo').value.trim(),
+        submitted: true,
+        updatedAt: new Date().toISOString(),
+      });
+      document.getElementById('f-msg').innerHTML = `<div class="msg ok">저장했습니다!</div>`;
+    } catch (e) {
+      document.getElementById('f-msg').innerHTML = `<div class="msg err">${esc(e.message)}</div>`;
+    }
+  };
+}
+
+render();
+</script>
+</body>
+</html>
