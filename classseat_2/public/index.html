@@ -144,7 +144,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc,
-  onSnapshot, updateDoc, query
+  onSnapshot, updateDoc, query, where
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ── Firebase 프로젝트 설정: 본인 프로젝트 값으로 교체하세요 ──
@@ -291,11 +291,17 @@ async function renderTeacher() {
   app.innerHTML = '불러오는 중...';
   const uid = auth.currentUser.uid;
 
-  // teacherUid == uid 인 class 문서들을 전부 읽어옴 (보안 규칙상 본인 것만 읽힘)
-  const snap = await getDocs(collection(db, 'classes'));
-  const myClasses = snap.docs
-    .filter((d) => d.data().teacherUid === uid)
-    .map((d) => ({ id: d.id, ...d.data() }));
+  let myClasses = [];
+  try {
+    // where 조건 없이 컬렉션 전체를 읽으면 Firestore 규칙이 쿼리 자체를 거부한다
+    const q = query(collection(db, 'classes'), where('teacherUid', '==', uid));
+    const snap = await getDocs(q);
+    myClasses = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    app.innerHTML = '';
+    app.appendChild(el(`<div class="card"><p class="error">반 목록을 불러오지 못했습니다: ${e.message}</p></div>`));
+    return;
+  }
 
   app.innerHTML = '';
   const header = el(`
@@ -450,7 +456,7 @@ async function renderClassBody(classId) {
   };
 
   // 제출 현황
-  const studentsSnap = await getDocs(collection(db, 'classes', classId, 'students')).catch(() => null);
+  //const studentsSnap = await getDocs(collection(db, 'classes', classId, 'students')).catch(() => null);
   // 선생님은 students 서브컬렉션 읽기 권한이 없으므로(설계상 의도), roster 기준으로만 인원수를 표시한다.
   const statusCard = el(`
     <div class="card">
