@@ -131,6 +131,54 @@
     display: inline-block; background: rgba(232,193,90,0.15); color: var(--accent);
     padding: 3px 10px; border-radius: 20px; font-size: 13px; font-weight: 600;
   }
+
+  /* 결과 좌석표: 사물함, 에어컨 표시 */
+  .seat.locker {
+    background: rgba(232,193,90,0.08); border-color: var(--accent-dim);
+    color: var(--chalk-dim); font-size: 10px;
+  }
+  .seat.aircon { position: relative; }
+  .seat.aircon::after {
+    content: "❄"; position: absolute; top: 2px; right: 4px;
+    font-size: 10px; color: var(--accent);
+  }
+
+  /* 교실 배치도 편집기 */
+  button.secondary.active {
+    background: rgba(232,193,90,0.16); border-color: var(--accent); color: var(--accent);
+  }
+  .board-bar {
+    background: rgba(0,0,0,0.28); border: 1px solid var(--line); border-radius: var(--radius);
+    color: var(--chalk-dim); text-align: center; letter-spacing: 0.5em;
+    font-size: 12px; padding: 6px 0; margin-bottom: 8px;
+  }
+  .editor-wrap { overflow-x: auto; padding-bottom: 6px; }
+  .editor-inner { display: inline-block; }
+  .edit-grid { --cell: 56px; display: grid; gap: 6px; }
+  .cell {
+    width: var(--cell); height: 46px; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: var(--chalk-dim);
+    background: rgba(0,0,0,0.2); border: 1px solid var(--line); border-radius: var(--radius);
+    cursor: pointer; user-select: none;
+  }
+  .cell:hover { border-color: var(--chalk-dim); }
+  .cell.seat { color: var(--chalk); }
+  .cell.aisle {
+    background: repeating-linear-gradient(135deg, rgba(244,241,230,0.07) 0 5px, transparent 5px 10px);
+    border-style: dashed;
+  }
+  .cell.locker { background: rgba(232,193,90,0.1); border-color: var(--accent-dim); color: var(--accent); }
+  .cell.ac { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .cell.ac::after { content: "❄"; position: absolute; top: 2px; right: 4px; font-size: 10px; color: var(--accent); }
+
+  .ctx-menu {
+    position: fixed; z-index: 300; min-width: 170px;
+    background: var(--board-light); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4); overflow: hidden;
+  }
+  .ctx-item { padding: 9px 14px; font-size: 13px; cursor: pointer; }
+  .ctx-item:hover { background: rgba(232,193,90,0.15); color: var(--accent); }
 </style>
 </head>
 <body>
@@ -394,6 +442,241 @@ function renderNewClassForm() {
 }
 
 // ────────────────────────────────────────────────────────────
+// 선생님 — 교실 배치도 편집기
+//  · 클릭: 좌석 → 통로 → 사물함 순환 / Shift+클릭 또는 ❄ 모드: 에어컨 표시 / 우클릭: 메뉴
+//  · 변경은 0.6초 뒤 자동 저장. 배치 실행 전에는 반드시 저장을 마친다(서버가 Firestore의 grid를 읽기 때문).
+//  · 좌석 키 = 행우선 인덱스(String(r*cols+c)). constraints.fixedSeats도 이 키를 쓰므로
+//    크기 변경/칸 종류 변경 시 함께 옮기거나 해제한다.
+// ────────────────────────────────────────────────────────────
+const GRID_MAX = 14;
+const CELL_CYCLE = ['seat', 'aisle', 'locker'];
+const CELL_LABEL = { seat: '좌석', aisle: '통로', locker: '사물함' };
+let _ge = null; // 현재 열려 있는 편집기 상태
+
+window.addEventListener('beforeunload', (e) => {
+  if (_ge && _ge.dirty) { e.preventDefault(); e.returnValue = ''; }
+});
+
+function mountGridEditor(classId, c) {
+  const rows = c.rows || 5;
+  const cols = c.cols || 6;
+  const gridValid = Array.isArray(c.grid) && c.grid.length === rows * cols;
+  const normalize = (x) => {
+    const type = CELL_CYCLE.includes(x && x.type) ? x.type : 'seat';
+    return { type, aircon: type === 'seat' && !!(x && x.aircon) };
+  };
+
+  const ge = {
+    classId, rows, cols,
+    grid: gridValid
+      ? c.grid.map(normalize)
+      : Array.from({ length: rows * cols }, () => ({ type: 'seat', aircon: false })),
+    fixedSeats: { ...((c.constraints && c.constraints.fixedSeats) || {}) },
+    rosterCount: Object.keys(c.roster || {}).length,
+    acMode: false,
+    dirty: false,
+    fixedDirty: false,   // fixedSeats가 편집기에서 바뀐 경우에만 함께 저장 (다른 제약 UI와 덮어쓰기 충돌 방지)
+    timer: null,
+    chain: Promise.resolve(),
+  };
+  _ge = ge;
+
+  const card = el(`
+    <div class="card">
+      <div class="row" style="justify-content:space-between;">
+        <h2>교실 배치도</h2>
+        <span class="muted" id="geStatus"></span>
+      </div>
+      <p class="muted">칸을 클릭하면 좌석 → 통로 → 사물함 순으로 바뀝니다. Shift+클릭이나 ❄ 모드로 에어컨 인근 좌석을 표시하고, 우클릭으로 메뉴를 엽니다. 위쪽이 칠판(앞)입니다.</p>
+      <div class="row" style="align-items:flex-end; margin:10px 0;">
+        <div style="width:88px;">
+          <label style="margin-top:0;">열 (가로)</label>
+          <input id="geCols" type="number" min="1" max="${GRID_MAX}" value="${cols}" />
+        </div>
+        <div style="width:88px;">
+          <label style="margin-top:0;">행 (세로)</label>
+          <input id="geRows" type="number" min="1" max="${GRID_MAX}" value="${rows}" />
+        </div>
+        <button class="secondary" id="geResize">크기 적용</button>
+        <button class="secondary" id="geAc">❄ 에어컨 모드</button>
+        <button class="secondary" id="geSaveBtn">지금 저장</button>
+      </div>
+      <div class="editor-wrap">
+        <div class="editor-inner">
+          <div class="board-bar">칠 판</div>
+          <div class="edit-grid" id="geGrid"></div>
+        </div>
+      </div>
+      <div id="geSummary" class="muted" style="margin-top:10px;"></div>
+      <div class="error" id="geErr" style="display:none;"></div>
+    </div>
+  `);
+  app.appendChild(card);
+
+  const gridEl = card.querySelector('#geGrid');
+  const errEl = card.querySelector('#geErr');
+
+  const setStatus = (text, isErr) => {
+    if (_ge !== ge) return; // 다른 반으로 이동한 뒤 늦게 도착한 상태 갱신은 무시
+    const s = card.querySelector('#geStatus');
+    s.textContent = text;
+    s.style.color = isErr ? 'var(--danger)' : '';
+  };
+
+  const render = () => {
+    gridEl.style.gridTemplateColumns = `repeat(${ge.cols}, var(--cell))`;
+    gridEl.innerHTML = ge.grid
+      .map((cell, i) => `<div class="cell ${cell.type}${cell.aircon ? ' ac' : ''}" data-i="${i}">${CELL_LABEL[cell.type]}</div>`)
+      .join('');
+    const seats = ge.grid.filter((x) => x.type === 'seat').length;
+    const short = ge.rosterCount > seats;
+    const sum = card.querySelector('#geSummary');
+    sum.className = short ? 'error' : 'muted';
+    sum.textContent = `좌석 ${seats}석 · 등록 학생 ${ge.rosterCount}명` + (short ? ' — 좌석이 학생 수보다 적습니다' : '');
+  };
+
+  // ── 저장 ──
+  const saveNow = () => {
+    clearTimeout(ge.timer);
+    ge.chain = ge.chain.then(async () => {
+      if (!ge.dirty) return;
+      ge.dirty = false;
+      const payload = {
+        rows: ge.rows,
+        cols: ge.cols,
+        grid: ge.grid.map((x) => ({ type: x.type, aircon: x.aircon })),
+      };
+      const withFixed = ge.fixedDirty;
+      if (withFixed) { payload['constraints.fixedSeats'] = { ...ge.fixedSeats }; ge.fixedDirty = false; }
+      setStatus('저장 중...');
+      try {
+        await updateDoc(doc(db, 'classes', ge.classId), payload);
+        setStatus('저장됨');
+      } catch (e) {
+        ge.dirty = true;
+        if (withFixed) ge.fixedDirty = true;
+        setStatus('저장 실패: ' + e.message, true);
+      }
+    });
+    return ge.chain;
+  };
+  const markDirty = () => {
+    ge.dirty = true;
+    setStatus('저장 대기 중...');
+    clearTimeout(ge.timer);
+    ge.timer = setTimeout(saveNow, 600);
+  };
+  // 배치 실행 직전에 호출: 저장이 끝났고 실패가 없어야 통과
+  ge.flush = async () => {
+    if (ge.dirty) await saveNow(); else await ge.chain;
+    if (ge.dirty) throw new Error('배치도를 저장하지 못해 배치를 실행할 수 없습니다. 네트워크를 확인하고 "지금 저장"을 눌러주세요.');
+  };
+
+  // ── 칸 편집 ──
+  const setType = (i, type) => {
+    const cell = ge.grid[i];
+    cell.type = type;
+    if (type !== 'seat') {
+      cell.aircon = false;
+      if (ge.fixedSeats[String(i)] !== undefined) { delete ge.fixedSeats[String(i)]; ge.fixedDirty = true; }
+    }
+  };
+
+  gridEl.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-i]');
+    if (!t) return;
+    const i = Number(t.dataset.i);
+    const cell = ge.grid[i];
+    if (e.shiftKey || ge.acMode) {
+      if (cell.type !== 'seat') return;
+      cell.aircon = !cell.aircon;
+    } else {
+      setType(i, CELL_CYCLE[(CELL_CYCLE.indexOf(cell.type) + 1) % CELL_CYCLE.length]);
+    }
+    render();
+    markDirty();
+  });
+
+  // ── 우클릭 메뉴 ──
+  const closeMenu = () => { const m = document.getElementById('geMenu'); if (m) m.remove(); };
+  gridEl.addEventListener('contextmenu', (e) => {
+    const t = e.target.closest('[data-i]');
+    if (!t) return;
+    e.preventDefault();
+    closeMenu();
+    const i = Number(t.dataset.i);
+    const cell = ge.grid[i];
+    const items = [['seat', '🪑 좌석으로'], ['aisle', '🚶 통로로'], ['locker', '🗄️ 사물함으로']];
+    if (cell.type === 'seat') items.push(['ac', cell.aircon ? '❄ 에어컨 표시 해제' : '❄ 에어컨 인근 표시']);
+    const menu = el(`<div class="ctx-menu" id="geMenu">${items.map(([k, l]) => `<div class="ctx-item" data-k="${k}">${l}</div>`).join('')}</div>`);
+    menu.style.left = Math.max(0, Math.min(e.clientX, window.innerWidth - 190)) + 'px';
+    menu.style.top = Math.max(0, Math.min(e.clientY, window.innerHeight - 40 * items.length - 10)) + 'px';
+    menu.addEventListener('click', (ev) => {
+      const k = ev.target.dataset.k;
+      if (!k) return;
+      if (k === 'ac') cell.aircon = !cell.aircon; else setType(i, k);
+      closeMenu();
+      render();
+      markDirty();
+    });
+    document.body.appendChild(menu);
+    setTimeout(() => document.addEventListener('click', closeMenu, { once: true }), 0);
+  });
+
+  // ── 크기 변경 ──
+  card.querySelector('#geResize').onclick = () => {
+    errEl.style.display = 'none';
+    const nc = parseInt(card.querySelector('#geCols').value, 10);
+    const nr = parseInt(card.querySelector('#geRows').value, 10);
+    if (!(nc >= 1 && nc <= GRID_MAX && nr >= 1 && nr <= GRID_MAX)) {
+      errEl.textContent = `행과 열은 1~${GRID_MAX} 사이의 숫자로 입력해주세요`;
+      errEl.style.display = 'block';
+      return;
+    }
+    if (nc === ge.cols && nr === ge.rows) return;
+
+    const oldR = ge.rows, oldC = ge.cols;
+    const newGrid = Array.from({ length: nr * nc }, (_, i) => {
+      const r = Math.floor(i / nc), cc = i % nc;
+      return r < oldR && cc < oldC ? ge.grid[r * oldC + cc] : { type: 'seat', aircon: false };
+    });
+
+    // 열 수가 바뀌면 좌석 키(인덱스)가 달라지므로 고정석을 새 좌표로 옮긴다
+    const oldFixed = ge.fixedSeats;
+    const newFixed = {};
+    let dropped = 0;
+    Object.entries(oldFixed).forEach(([key, studentId]) => {
+      const idx = Number(key), r = Math.floor(idx / oldC), cc = idx % oldC;
+      if (r < nr && cc < nc && newGrid[r * nc + cc].type === 'seat') newFixed[String(r * nc + cc)] = studentId;
+      else dropped++;
+    });
+    if (dropped && !confirm(`줄어드는 범위에 있는 고정 좌석 ${dropped}개가 해제됩니다. 계속할까요?`)) return;
+
+    ge.rows = nr;
+    ge.cols = nc;
+    ge.grid = newGrid;
+    if (Object.keys(oldFixed).length) { ge.fixedSeats = newFixed; ge.fixedDirty = true; }
+    render();
+    markDirty();
+  };
+
+  // ── 에어컨 모드(Shift 키가 없는 터치 기기용) / 수동 저장 ──
+  const acBtn = card.querySelector('#geAc');
+  acBtn.onclick = () => {
+    ge.acMode = !ge.acMode;
+    acBtn.classList.toggle('active', ge.acMode);
+  };
+  card.querySelector('#geSaveBtn').onclick = () => {
+    if (!ge.dirty) { setStatus('변경 사항이 없습니다'); return; }
+    saveNow();
+  };
+
+  render();
+  if (!gridValid) markDirty(); // 저장된 grid가 없거나 크기가 어긋난 반은 기본 배치도로 채워서 저장
+  return ge;
+}
+
+// ────────────────────────────────────────────────────────────
 // 선생님 — 반 상세: 학생 관리, 가중치, 배치 실행, 결과
 // ────────────────────────────────────────────────────────────
 async function renderClassBody(classId) {
@@ -466,6 +749,9 @@ async function renderClassBody(classId) {
   `);
   app.appendChild(statusCard);
 
+  // 교실 배치도 편집기
+  const ge = mountGridEditor(classId, c);
+
   // 가중치 슬라이더
   const w = c.weights || {};
   const weightLabels = [
@@ -521,6 +807,7 @@ async function renderClassBody(classId) {
     btn.disabled = true;
     status.textContent = '계산 중...';
     try {
+      await ge.flush(); // 서버는 Firestore에 저장된 배치도를 읽으므로 저장이 끝난 뒤에 실행
       const idToken = await auth.currentUser.getIdToken();
       await api('/api/run-seating', { classId }, idToken);
       status.textContent = '완료';
@@ -542,12 +829,17 @@ async function renderClassBody(classId) {
           <h2>최종 좌석 배치</h2>
           <span class="score-badge">점수 ${Math.round(result.score)}</span>
         </div>
+        <div class="board-bar" style="margin-top:12px;">칠 판</div>
         <div class="seat-grid" id="seatGrid" style="grid-template-columns: repeat(${result.cols}, 1fr);"></div>
       </div>
     `);
     app.appendChild(resultCard);
     const grid = resultCard.querySelector('#seatGrid');
     result.grid.forEach((cell) => {
+      if (cell.type === 'locker') {
+        grid.appendChild(el(`<div class="seat locker">사물함</div>`));
+        return;
+      }
       if (cell.type !== 'seat') {
         grid.appendChild(el(`<div class="seat aisle"></div>`));
         return;
