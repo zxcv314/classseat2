@@ -1,0 +1,40 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /classes/{classId} {
+      allow read: if request.auth != null && (
+        resource.data.teacherUid == request.auth.uid ||
+        (request.auth.token.role == 'student' && request.auth.token.classId == classId)
+      );
+      allow create: if request.auth != null && request.auth.token.role != 'student'
+                    && request.resource.data.teacherUid == request.auth.uid;
+      allow update, delete: if request.auth != null && resource.data.teacherUid == request.auth.uid
+                    && request.auth.token.role != 'student';
+
+      match /students/{number} {
+        // 오직 본인(같은 반, 같은 번호)만 읽을 수 있음. 선생님은 읽기 권한이 없음.
+        allow read: if request.auth != null && request.auth.token.role == 'student'
+                    && request.auth.token.classId == classId && request.auth.token.number == number;
+
+        // 본인만, 그것도 정해진 필드만 수정 가능. pinHash/teacherUid 등은 건드릴 수 없음.
+        allow update: if request.auth != null && request.auth.token.role == 'student'
+                    && request.auth.token.classId == classId && request.auth.token.number == number
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                      'mbti', 'eyesight', 'grade', 'height', 'preferredLocation', 'aircon',
+                      'activity', 'preferredMates', 'avoidedMate', 'memo', 'submitted', 'updatedAt'
+                    ]);
+
+        // create/delete는 규칙에 명시하지 않음 → 기본 거부. Admin SDK(서버)만 가능.
+      }
+
+      match /results/{doc} {
+        // 그 반 담당 선생님만 결과를 읽을 수 있음.
+        allow read: if request.auth != null &&
+          get(/databases/$(database)/documents/classes/$(classId)).data.teacherUid == request.auth.uid;
+        // 쓰기 규칙 없음 → 클라이언트 쓰기 기본 거부. Admin SDK(서버)만 가능.
+      }
+    }
+  }
+}

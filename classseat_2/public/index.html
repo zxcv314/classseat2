@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>자리배치</title>
+<style>
+  :root {
+    --board: #1f3a2e;
+    --board-light: #2b4d3c;
+    --chalk: #f4f1e6;
+    --chalk-dim: #cdd6cc;
+    --accent: #e8c15a;
+    --accent-dim: #b99a3f;
+    --danger: #d97164;
+    --line: rgba(244, 241, 230, 0.16);
+    --radius: 3px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--board);
+    color: var(--chalk);
+    font-family: "Pretendard", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    line-height: 1.55;
+  }
+  #app { max-width: 960px; margin: 0 auto; padding: 40px 20px 80px; }
+
+  h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; margin: 0 0 6px; }
+  h1 { font-size: 26px; }
+  h2 { font-size: 19px; }
+  h3 { font-size: 15px; color: var(--chalk-dim); font-weight: 500; }
+  p { color: var(--chalk-dim); }
+  .muted { color: var(--chalk-dim); font-size: 13px; }
+
+  .card {
+    background: var(--board-light);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+
+  label { display: block; font-size: 13px; color: var(--chalk-dim); margin: 14px 0 5px; }
+  input, select, textarea {
+    width: 100%;
+    padding: 9px 11px;
+    background: rgba(0,0,0,0.18);
+    border: 1px solid var(--line);
+    color: var(--chalk);
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-family: inherit;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent-dim);
+  }
+  textarea { resize: vertical; min-height: 60px; }
+
+  button {
+    font-family: inherit;
+    font-size: 14px;
+    border: none;
+    border-radius: var(--radius);
+    padding: 10px 18px;
+    cursor: pointer;
+    background: var(--accent);
+    color: #1a1a12;
+    font-weight: 600;
+  }
+  button:hover { background: #f0cd6d; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--chalk);
+    font-weight: 500;
+  }
+  button.secondary:hover { border-color: var(--chalk-dim); }
+  button.danger { background: var(--danger); color: #2a0d0a; }
+  button.link { background: none; padding: 0; color: var(--accent); font-weight: 500; text-decoration: underline; }
+
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+  .tabs button { background: transparent; color: var(--chalk-dim); border: 1px solid var(--line); }
+  .tabs button.active { background: var(--accent); color: #1a1a12; border-color: var(--accent); }
+
+  .error { color: var(--danger); font-size: 13px; margin-top: 8px; }
+  .success { color: #8fd0a5; font-size: 13px; margin-top: 8px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--chalk-dim); font-weight: 500; }
+
+  .class-list { display: flex; flex-direction: column; gap: 8px; }
+  .class-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 16px; background: rgba(0,0,0,0.14); border-radius: var(--radius);
+    cursor: pointer; border: 1px solid transparent;
+  }
+  .class-item:hover { border-color: var(--line); }
+
+  .seat-grid { display: grid; gap: 6px; margin: 16px 0; }
+  .seat {
+    aspect-ratio: 1;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    background: rgba(0,0,0,0.2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    font-size: 12px;
+    text-align: center;
+    padding: 4px;
+  }
+  .seat.aisle { background: transparent; border: none; }
+  .seat.aircon { border-color: var(--accent-dim); }
+  .seat .name { font-weight: 600; font-size: 13px; }
+  .seat .num { color: var(--chalk-dim); font-size: 10px; }
+
+  .weight-row { display: grid; grid-template-columns: 110px 1fr 40px; gap: 10px; align-items: center; margin-bottom: 8px; }
+  .weight-row input[type=range] { width: 100%; }
+  .weight-row span { text-align: right; font-size: 13px; color: var(--chalk-dim); }
+
+  .pin-table td:last-child { font-family: monospace; letter-spacing: 0.05em; color: var(--accent); }
+
+  a.back { color: var(--chalk-dim); font-size: 13px; text-decoration: none; }
+  a.back:hover { color: var(--chalk); }
+
+  .score-badge {
+    display: inline-block; background: rgba(232,193,90,0.15); color: var(--accent);
+    padding: 3px 10px; border-radius: 20px; font-size: 13px; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+<div id="app">불러오는 중...</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  signOut, onAuthStateChanged, signInWithCustomToken
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc,
+  onSnapshot, updateDoc, query
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ── Firebase 프로젝트 설정: 본인 프로젝트 값으로 교체하세요 ──
+const firebaseConfig = {
+  apiKey: "AIzaSyAOKhgT1fHeNs0wIhjc6rcjqCgjcX7FcFk",
+  authDomain: "classseat-c7328.firebaseapp.com",
+  projectId: "classseat-c7328",
+  storageBucket: "classseat-c7328.firebasestorage.app",
+  messagingSenderId: "100599928392",
+  appId: "1:100599928392:web:af72a41e571def1511aa7d",
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+const app = document.getElementById('app');
+
+let _role = null;       // 'teacher' | 'student' | null
+let _studentClaims = null; // { classId, number } — 학생 로그인 시 커스텀 클레임 저장
+let _selectedClassId = null;
+
+// ── 서버 API 호출 헬퍼 ──
+async function api(path, body, idToken) {
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(idToken ? { Authorization: 'Bearer ' + idToken } : {}),
+    },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || '요청에 실패했습니다');
+  return data;
+}
+
+function el(html) {
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  return t.content.firstElementChild;
+}
+
+// ────────────────────────────────────────────────────────────
+// 라우터
+// ────────────────────────────────────────────────────────────
+function render() {
+  if (!auth.currentUser) { renderLanding(); return; }
+  if (_role === 'teacher') renderTeacher();
+  else if (_role === 'student') renderStudent();
+  else renderLanding();
+}
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    _role = null;
+    render();
+    return;
+  }
+  // 커스텀 토큰으로 로그인한 학생인지, 일반 이메일 로그인 선생님인지 구분
+  const idTokenResult = await user.getIdTokenResult();
+  if (idTokenResult.claims.role === 'student') {
+    _role = 'student';
+    _studentClaims = { classId: idTokenResult.claims.classId, number: idTokenResult.claims.number };
+  } else {
+    _role = 'teacher';
+  }
+  render();
+});
+
+// ────────────────────────────────────────────────────────────
+// 랜딩 — 선생님/학생 선택
+// ────────────────────────────────────────────────────────────
+function renderLanding() {
+  app.innerHTML = '';
+  app.appendChild(el(`
+    <div>
+      <h1>학급 자리배치</h1>
+      <p class="muted">선생님은 반을 관리하고 배치를 실행합니다. 학생은 본인 정보만 입력합니다.</p>
+      <div class="row" style="margin-top:24px;">
+        <div class="card" style="flex:1; min-width:220px; cursor:pointer;" id="goTeacher">
+          <h2>선생님</h2>
+          <p class="muted">반 생성, 학생 계정 발급, 배치 실행</p>
+        </div>
+        <div class="card" style="flex:1; min-width:220px; cursor:pointer;" id="goStudent">
+          <h2>학생</h2>
+          <p class="muted">번호 + PIN으로 로그인, 정보 입력</p>
+        </div>
+      </div>
+    </div>
+  `));
+  document.getElementById('goTeacher').onclick = () => renderTeacherAuth();
+  document.getElementById('goStudent').onclick = () => renderStudentAuth();
+}
+
+// ────────────────────────────────────────────────────────────
+// 선생님 인증 — 일반 Firebase Auth (이메일/비밀번호)
+// ────────────────────────────────────────────────────────────
+function renderTeacherAuth(mode = 'login') {
+  app.innerHTML = '';
+  const wrap = el(`
+    <div style="max-width:380px;">
+      <a href="#" class="back" id="back">← 뒤로</a>
+      <h1 style="margin-top:14px;">선생님 ${mode === 'login' ? '로그인' : '회원가입'}</h1>
+      <div class="tabs">
+        <button id="tabLogin" class="${mode === 'login' ? 'active' : ''}">로그인</button>
+        <button id="tabSignup" class="${mode === 'signup' ? 'active' : ''}">회원가입</button>
+      </div>
+      <div class="card">
+        <label>이메일</label>
+        <input type="email" id="email" placeholder="teacher@school.ac.kr" />
+        <label>비밀번호</label>
+        <input type="password" id="pw" placeholder="6자 이상" />
+        <div style="margin-top:16px;">
+          <button id="submit">${mode === 'login' ? '로그인' : '가입하기'}</button>
+        </div>
+        <div class="error" id="err" style="display:none;"></div>
+      </div>
+    </div>
+  `);
+  app.appendChild(wrap);
+  document.getElementById('back').onclick = (e) => { e.preventDefault(); renderLanding(); };
+  document.getElementById('tabLogin').onclick = () => renderTeacherAuth('login');
+  document.getElementById('tabSignup').onclick = () => renderTeacherAuth('signup');
+  document.getElementById('submit').onclick = async () => {
+    const email = document.getElementById('email').value.trim();
+    const pw = document.getElementById('pw').value;
+    const errEl = document.getElementById('err');
+    errEl.style.display = 'none';
+    try {
+      if (mode === 'login') await signInWithEmailAndPassword(auth, email, pw);
+      else await createUserWithEmailAndPassword(auth, email, pw);
+      // onAuthStateChanged가 render()를 자동 호출함
+    } catch (e) {
+      errEl.textContent = e.message.replace('Firebase: ', '');
+      errEl.style.display = 'block';
+    }
+  };
+}
+
+// ────────────────────────────────────────────────────────────
+// 선생님 — 반 목록 / 반 생성
+// ────────────────────────────────────────────────────────────
+async function renderTeacher() {
+  app.innerHTML = '불러오는 중...';
+  const uid = auth.currentUser.uid;
+
+  // teacherUid == uid 인 class 문서들을 전부 읽어옴 (보안 규칙상 본인 것만 읽힘)
+  const snap = await getDocs(collection(db, 'classes'));
+  const myClasses = snap.docs
+    .filter((d) => d.data().teacherUid === uid)
+    .map((d) => ({ id: d.id, ...d.data() }));
+
+  app.innerHTML = '';
+  const header = el(`
+    <div class="row" style="justify-content:space-between; margin-bottom:20px;">
+      <h1>내 학급</h1>
+      <button class="secondary" id="logout">로그아웃</button>
+    </div>
+  `);
+  app.appendChild(header);
+  document.getElementById('logout').onclick = () => signOut(auth);
+
+  if (myClasses.length === 0) {
+    // 반이 0개면 처음부터 생성 폼을 보여준다 (드롭다운 옵션 하나뿐이라 onchange 안 불리는 버그 회피)
+    renderNewClassForm();
+    return;
+  }
+
+  const list = el(`<div class="card"><h2>반 목록</h2><div class="class-list" id="list"></div></div>`);
+  app.appendChild(list);
+  const listEl = list.querySelector('#list');
+  myClasses.forEach((c) => {
+    const item = el(`
+      <div class="class-item">
+        <div><strong>${c.name || '(이름 없음)'}</strong><div class="muted">코드: ${c.id}</div></div>
+        <span class="muted">${Object.keys(c.roster || {}).length}명 →</span>
+      </div>
+    `);
+    item.onclick = () => renderClassBody(c.id);
+    listEl.appendChild(item);
+  });
+
+  const newBtn = el(`<button id="newClass" style="margin-top:4px;">+ 새 반 만들기</button>`);
+  app.appendChild(newBtn);
+  document.getElementById('newClass').onclick = () => renderNewClassForm();
+}
+
+function renderNewClassForm() {
+  app.innerHTML = '';
+  const wrap = el(`
+    <div>
+      <a href="#" class="back" id="back">← 반 목록</a>
+      <h1 style="margin-top:14px;">새 반 만들기</h1>
+      <div class="card" style="max-width:420px;">
+        <label>반 이름</label>
+        <input id="name" placeholder="예: 2학년 3반" />
+        <div class="row">
+          <div style="flex:1;">
+            <label>가로 좌석 수 (열)</label>
+            <input id="cols" type="number" value="6" min="1" />
+          </div>
+          <div style="flex:1;">
+            <label>세로 좌석 수 (행)</label>
+            <input id="rows" type="number" value="5" min="1" />
+          </div>
+        </div>
+        <p class="muted" style="margin-top:10px;">교실 배치도(통로, 에어컨 위치)는 반 생성 후 화면에서 세부 설정할 수 있습니다.</p>
+        <button id="create" style="margin-top:8px;">반 만들기</button>
+        <div class="error" id="err" style="display:none;"></div>
+      </div>
+    </div>
+  `);
+  app.appendChild(wrap);
+  document.getElementById('back').onclick = (e) => { e.preventDefault(); renderTeacher(); };
+  document.getElementById('create').onclick = async () => {
+    const name = document.getElementById('name').value.trim();
+    const cols = parseInt(document.getElementById('cols').value, 10);
+    const rows = parseInt(document.getElementById('rows').value, 10);
+    const errEl = document.getElementById('err');
+    if (!name || !cols || !rows) {
+      errEl.textContent = '모든 값을 입력해주세요';
+      errEl.style.display = 'block';
+      return;
+    }
+    const grid = Array.from({ length: rows * cols }, () => ({ type: 'seat', aircon: false }));
+    const classId = (name.replace(/\s+/g, '') + '-' + Math.random().toString(36).slice(2, 6)).toLowerCase();
+    try {
+      await setDoc(doc(db, 'classes', classId), {
+        teacherUid: auth.currentUser.uid,
+        name, rows, cols, grid,
+        roster: {},
+        constraints: { blacklist: [], whitelist: [], fixedSeats: {} },
+        weights: { location: 5, aircon: 3, mates: 6, personality: 3, grade: 4, height: 4, activity: 3 },
+      });
+      renderClassBody(classId);
+    } catch (e) {
+      errEl.textContent = e.message;
+      errEl.style.display = 'block';
+    }
+  };
+}
+
+// ────────────────────────────────────────────────────────────
+// 선생님 — 반 상세: 학생 관리, 가중치, 배치 실행, 결과
+// ────────────────────────────────────────────────────────────
+async function renderClassBody(classId) {
+  _selectedClassId = classId;
+  app.innerHTML = '불러오는 중...';
+  const snap = await getDoc(doc(db, 'classes', classId));
+  if (!snap.exists()) { renderTeacher(); return; }
+  const c = { id: classId, ...snap.data() };
+
+  const resultSnap = await getDoc(doc(db, 'classes', classId, 'results', 'current')).catch(() => null);
+  const result = resultSnap && resultSnap.exists() ? resultSnap.data() : null;
+
+  app.innerHTML = '';
+  app.appendChild(el(`
+    <div>
+      <a href="#" class="back" id="back">← 반 목록</a>
+      <div class="row" style="justify-content:space-between; margin-top:14px;">
+        <div><h1>${c.name}</h1><p class="muted">반 코드: <strong>${c.id}</strong> (학생에게 공유하세요)</p></div>
+      </div>
+    </div>
+  `));
+  document.getElementById('back').onclick = (e) => { e.preventDefault(); renderTeacher(); };
+
+  // 학생 계정 생성
+  const studentsCard = el(`
+    <div class="card">
+      <h2>학생 계정 생성</h2>
+      <p class="muted">이름을 한 줄에 한 명씩 입력하면 번호와 PIN이 자동 발급됩니다. 현재 등록: ${Object.keys(c.roster || {}).length}명</p>
+      <textarea id="names" placeholder="홍길동&#10;김철수&#10;이영희"></textarea>
+      <button id="createStudents" style="margin-top:10px;">계정 생성</button>
+      <div id="pinResult"></div>
+      <div class="error" id="err1" style="display:none;"></div>
+    </div>
+  `);
+  app.appendChild(studentsCard);
+  document.getElementById('createStudents').onclick = async () => {
+    const names = document.getElementById('names').value.split('\n').map((s) => s.trim()).filter(Boolean);
+    const errEl = document.getElementById('err1');
+    errEl.style.display = 'none';
+    if (names.length === 0) return;
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const res = await api('/api/create-students', { classId, names }, idToken);
+      const tbl = el(`
+        <div>
+          <p class="success">${res.created.length}명 생성 완료. PIN은 지금만 표시됩니다 — 캡처하거나 적어서 나눠주세요.</p>
+          <table class="pin-table">
+            <tr><th>번호</th><th>이름</th><th>PIN</th></tr>
+            ${res.created.map((s) => `<tr><td>${s.number}</td><td>${s.name}</td><td>${s.pin}</td></tr>`).join('')}
+          </table>
+        </div>
+      `);
+      document.getElementById('pinResult').innerHTML = '';
+      document.getElementById('pinResult').appendChild(tbl);
+      document.getElementById('names').value = '';
+    } catch (e) {
+      errEl.textContent = e.message;
+      errEl.style.display = 'block';
+    }
+  };
+
+  // 제출 현황
+  const studentsSnap = await getDocs(collection(db, 'classes', classId, 'students')).catch(() => null);
+  // 선생님은 students 서브컬렉션 읽기 권한이 없으므로(설계상 의도), roster 기준으로만 인원수를 표시한다.
+  const statusCard = el(`
+    <div class="card">
+      <h2>제출 현황</h2>
+      <p class="muted">등록 학생: ${Object.keys(c.roster || {}).length}명. 개인정보(MBTI, 성적, 선호짝꿍 등)는 선생님도 볼 수 없으며, 오직 배치 계산에만 사용됩니다.</p>
+    </div>
+  `);
+  app.appendChild(statusCard);
+
+  // 가중치 슬라이더
+  const w = c.weights || {};
+  const weightLabels = [
+    ['location', '선호 위치'], ['aircon', '에어컨'], ['mates', '선호 짝꿍'],
+    ['personality', '성격 균형'], ['grade', '성적 균형'], ['height', '키 순서'], ['activity', '활동성 분산'],
+  ];
+  const weightsCard = el(`
+    <div class="card">
+      <h2>배치 가중치</h2>
+      <p class="muted">각 항목이 배치 점수에서 얼마나 중요한지 조절합니다.</p>
+      <div id="weightRows"></div>
+      <button id="saveWeights" class="secondary" style="margin-top:6px;">가중치 저장</button>
+    </div>
+  `);
+  app.appendChild(weightsCard);
+  const wRows = weightsCard.querySelector('#weightRows');
+  weightLabels.forEach(([key, label]) => {
+    const val = w[key] ?? 3;
+    const row = el(`
+      <div class="weight-row">
+        <label style="margin:0;">${label}</label>
+        <input type="range" min="0" max="10" value="${val}" data-key="${key}" />
+        <span>${val}</span>
+      </div>
+    `);
+    const input = row.querySelector('input');
+    const span = row.querySelector('span');
+    input.oninput = () => { span.textContent = input.value; };
+    wRows.appendChild(row);
+  });
+  document.getElementById('saveWeights').onclick = async () => {
+    const newWeights = {};
+    wRows.querySelectorAll('input').forEach((i) => { newWeights[i.dataset.key] = Number(i.value); });
+    await updateDoc(doc(db, 'classes', classId), { weights: newWeights });
+  };
+
+  // 배치 실행
+  const runCard = el(`
+    <div class="card">
+      <h2>배치 실행</h2>
+      <p class="muted">정보를 입력 완료한 학생들을 대상으로 최적 좌석을 계산합니다. 최대 30초 정도 걸릴 수 있습니다.</p>
+      <button id="runSeating">배치 실행</button>
+      <span id="runStatus" class="muted" style="margin-left:10px;"></span>
+      <div class="error" id="err2" style="display:none;"></div>
+    </div>
+  `);
+  app.appendChild(runCard);
+  document.getElementById('runSeating').onclick = async () => {
+    const btn = document.getElementById('runSeating');
+    const status = document.getElementById('runStatus');
+    const errEl = document.getElementById('err2');
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    status.textContent = '계산 중...';
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      await api('/api/run-seating', { classId }, idToken);
+      status.textContent = '완료';
+      renderClassBody(classId);
+    } catch (e) {
+      errEl.textContent = e.message;
+      errEl.style.display = 'block';
+      status.textContent = '';
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  // 결과 좌석표
+  if (result) {
+    const resultCard = el(`
+      <div class="card">
+        <div class="row" style="justify-content:space-between;">
+          <h2>최종 좌석 배치</h2>
+          <span class="score-badge">점수 ${Math.round(result.score)}</span>
+        </div>
+        <div class="seat-grid" id="seatGrid" style="grid-template-columns: repeat(${result.cols}, 1fr);"></div>
+      </div>
+    `);
+    app.appendChild(resultCard);
+    const grid = resultCard.querySelector('#seatGrid');
+    result.grid.forEach((cell) => {
+      if (cell.type !== 'seat') {
+        grid.appendChild(el(`<div class="seat aisle"></div>`));
+        return;
+      }
+      grid.appendChild(el(`
+        <div class="seat ${cell.aircon ? 'aircon' : ''}">
+          <div class="name">${cell.name || '-'}</div>
+          <div class="num">${cell.number || ''}</div>
+        </div>
+      `));
+    });
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+// 학생 인증 — 반코드 + 번호 + PIN → 커스텀 토큰
+// ────────────────────────────────────────────────────────────
+function renderStudentAuth() {
+  app.innerHTML = '';
+  const wrap = el(`
+    <div style="max-width:360px;">
+      <a href="#" class="back" id="back">← 뒤로</a>
+      <h1 style="margin-top:14px;">학생 로그인</h1>
+      <div class="card">
+        <label>반 코드</label>
+        <input id="classId" placeholder="선생님께 받은 반 코드" />
+        <label>번호</label>
+        <input id="number" type="number" placeholder="예: 3" />
+        <label>PIN (4자리)</label>
+        <input id="pin" type="password" maxlength="4" placeholder="0000" />
+        <button id="login" style="margin-top:14px;">로그인</button>
+        <div class="error" id="err" style="display:none;"></div>
+      </div>
+    </div>
+  `);
+  app.appendChild(wrap);
+  document.getElementById('back').onclick = (e) => { e.preventDefault(); renderLanding(); };
+  document.getElementById('login').onclick = async () => {
+    const classId = document.getElementById('classId').value.trim();
+    const number = document.getElementById('number').value.trim();
+    const pin = document.getElementById('pin').value.trim();
+    const errEl = document.getElementById('err');
+    errEl.style.display = 'none';
+    try {
+      const res = await api('/api/student-login', { classId, number, pin });
+      await signInWithCustomToken(auth, res.token);
+      // onAuthStateChanged가 render()를 자동 호출함
+    } catch (e) {
+      errEl.textContent = e.message;
+      errEl.style.display = 'block';
+    }
+  };
+}
+
+// ────────────────────────────────────────────────────────────
+// 학생 — 본인 정보 입력 폼
+// ────────────────────────────────────────────────────────────
+async function renderStudent() {
+  app.innerHTML = '불러오는 중...';
+  const { classId, number } = _studentClaims;
+  const ref = doc(db, 'classes', classId, 'students', number);
+  const snap = await getDoc(ref);
+  const s = snap.exists() ? snap.data() : {};
+
+  app.innerHTML = '';
+  const wrap = el(`
+    <div style="max-width:480px;">
+      <div class="row" style="justify-content:space-between;">
+        <h1>${s.name || ''}님, 안녕하세요</h1>
+        <button class="secondary" id="logout">로그아웃</button>
+      </div>
+      <p class="muted">입력하신 내용은 선생님이 볼 수 없으며, 배치 계산에만 사용됩니다.</p>
+      <div class="card">
+        <label>MBTI</label>
+        <input id="mbti" value="${s.mbti || ''}" placeholder="예: INFP" />
+
+        <label>시력 (1=매우 나쁨 ~ 5=매우 좋음)</label>
+        <select id="eyesight">
+          ${[1,2,3,4,5].map((n) => `<option value="${n}" ${s.eyesight == n ? 'selected' : ''}>${n}</option>`).join('')}
+        </select>
+
+        <label>성적 (숫자, 학교 기준에 맞게)</label>
+        <input id="grade" type="number" value="${s.grade ?? ''}" />
+
+        <label>키 (cm)</label>
+        <input id="height" type="number" value="${s.height ?? ''}" />
+
+        <label>선호 위치</label>
+        <select id="preferredLocation">
+          <option value="">상관없음</option>
+          <option value="front" ${s.preferredLocation === 'front' ? 'selected' : ''}>앞</option>
+          <option value="middle" ${s.preferredLocation === 'middle' ? 'selected' : ''}>중간</option>
+          <option value="back" ${s.preferredLocation === 'back' ? 'selected' : ''}>뒤</option>
+        </select>
+
+        <label>에어컨 선호</label>
+        <select id="aircon">
+          <option value="">상관없음</option>
+          <option value="near" ${s.aircon === 'near' ? 'selected' : ''}>가까이</option>
+          <option value="far" ${s.aircon === 'far' ? 'selected' : ''}>멀리</option>
+        </select>
+
+        <label>활동성 (1=조용함 ~ 5=매우 활발함)</label>
+        <select id="activity">
+          ${[1,2,3,4,5].map((n) => `<option value="${n}" ${s.activity == n ? 'selected' : ''}>${n}</option>`).join('')}
+        </select>
+
+        <label>선호하는 짝꿍 번호 (최대 3명, 1지망부터 콤마로 구분)</label>
+        <input id="preferredMates" value="${(s.preferredMates || []).join(', ')}" placeholder="예: 5, 12, 7" />
+
+        <label>기피하는 짝꿍 번호</label>
+        <input id="avoidedMate" value="${s.avoidedMate || ''}" placeholder="예: 9" />
+
+        <label>선생님께 하고 싶은 말 (선택)</label>
+        <textarea id="memo">${s.memo || ''}</textarea>
+
+        <button id="save" style="margin-top:14px;">저장</button>
+        <span id="saveStatus" class="muted" style="margin-left:8px;"></span>
+      </div>
+    </div>
+  `);
+  app.appendChild(wrap);
+
+  document.getElementById('logout').onclick = () => signOut(auth);
+  document.getElementById('save').onclick = async () => {
+    const mates = document.getElementById('preferredMates').value
+      .split(',').map((s) => s.trim()).filter(Boolean).slice(0, 3);
+    const payload = {
+      mbti: document.getElementById('mbti').value.trim().toUpperCase(),
+      eyesight: Number(document.getElementById('eyesight').value),
+      grade: Number(document.getElementById('grade').value) || null,
+      height: Number(document.getElementById('height').value) || null,
+      preferredLocation: document.getElementById('preferredLocation').value,
+      aircon: document.getElementById('aircon').value,
+      activity: Number(document.getElementById('activity').value),
+      preferredMates: mates,
+      avoidedMate: document.getElementById('avoidedMate').value.trim(),
+      memo: document.getElementById('memo').value,
+      submitted: true,
+      updatedAt: new Date().toISOString(),
+    };
+    const status = document.getElementById('saveStatus');
+    try {
+      await updateDoc(ref, payload);
+      status.textContent = '저장되었습니다';
+    } catch (e) {
+      status.textContent = '저장 실패: ' + e.message;
+    }
+  };
+}
+</script>
+</body>
+</html>
