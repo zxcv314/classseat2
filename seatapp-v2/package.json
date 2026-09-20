@@ -1,9 +1,0 @@
-{
-  "name": "seatapp-v2",
-  "version": "1.0.0",
-  "private": true,
-  "description": "자리배치 프로그램 v2 - 선생님/학생 계정 분리, 서버 계산으로 학생 원본 정보는 선생님에게 노출되지 않음",
-  "dependencies": {
-    "firebase-admin": "^12.1.0"
-  }
-}
