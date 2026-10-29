@@ -1,0 +1,9 @@
+{
+  "name": "classseat2",
+  "version": "2.0.0",
+  "private": true,
+  "description": "학급 자리배치 프로그램 v2 — Firebase + Vercel",
+  "dependencies": {
+    "firebase-admin": "^12.1.0"
+  }
+}

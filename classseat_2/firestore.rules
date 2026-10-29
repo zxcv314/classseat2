@@ -1,0 +1,67 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 선생님 계정에는 role 클레임이 없으므로 token.role을 직접 참조하면 오류(=거부)가 난다.
+    // 반드시 get(키, 기본값)으로 읽는다.
+    function isStudent() {
+      return request.auth != null && request.auth.token.get('role', '') == 'student';
+    }
+    function isStudentOfClass(classId) {
+      return isStudent() && request.auth.token.get('classId', '') == classId;
+    }
+    function isTeacherOf(classId) {
+      return request.auth != null && !isStudent() &&
+        get(/databases/$(database)/documents/classes/$(classId)).data.teacherUid == request.auth.uid;
+    }
+    function isArchived(classId) {
+      return get(/databases/$(database)/documents/classes/$(classId)).data.get('archived', false) == true;
+    }
+
+    match /classes/{classId} {
+      // 목록 조회는 where('teacherUid', '==', uid) 쿼리로 해야 통과한다 (규칙은 필터가 아니다).
+      allow read: if request.auth != null && (
+        resource.data.teacherUid == request.auth.uid ||
+        isStudentOfClass(classId)
+      );
+      allow create: if request.auth != null && !isStudent()
+                    && request.resource.data.teacherUid == request.auth.uid;
+      allow update, delete: if request.auth != null && !isStudent()
+                    && resource.data.teacherUid == request.auth.uid;
+
+      match /students/{number} {
+        // 오직 본인(같은 반, 같은 번호)만 읽을 수 있음. 선생님은 읽기 권한이 없음.
+        allow read: if isStudentOfClass(classId) && request.auth.token.get('number', '') == number;
+
+        // 본인만, 그것도 정해진 필드만 수정 가능. pinHash/teacherUid 등은 건드릴 수 없음.
+        // 보관된 반에서는 수정 불가.
+        allow update: if isStudentOfClass(classId) && request.auth.token.get('number', '') == number
+                      && !isArchived(classId)
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                        'mbti', 'eyesight', 'grade', 'height', 'preferredLocation', 'preferredSeat', 'aircon',
+                        'activity', 'preferredMates', 'avoidedMate', 'memo', 'submitted', 'updatedAt'
+                      ]);
+
+        // create/delete는 규칙에 명시하지 않음 → 기본 거부. Admin SDK(서버)만 가능.
+      }
+
+      // 제약조건/가중치: 학생이 볼 수 없도록 class 문서가 아니라 여기에 둔다. 선생님만 읽고 쓴다.
+      match /settings/{doc} {
+        allow read: if isTeacherOf(classId);
+        allow write: if isTeacherOf(classId)
+                     && request.resource.data.keys().hasOnly(['constraints', 'weights']);
+      }
+
+      match /results/{doc} {
+        // 그 반 담당 선생님만 결과를 읽을 수 있음. 쓰기는 Admin SDK(서버)만.
+        allow read: if isTeacherOf(classId);
+      }
+
+      match /history/{doc} {
+        // 배치 이력. 읽기는 담당 선생님만, 쓰기는 Admin SDK(서버)만.
+        allow read: if isTeacherOf(classId);
+      }
+    }
+  }
+}
