@@ -1,8 +1,0 @@
-{
-  "outputDirectory": "public",
-  "functions": {
-    "api/run-seating.js": { "maxDuration": 30 },
-    "api/create-students.js": { "maxDuration": 15 },
-    "api/student-login.js": { "maxDuration": 10 }
-  }
-}
